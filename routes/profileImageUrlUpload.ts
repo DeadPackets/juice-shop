@@ -35,6 +35,19 @@ function isInternalAddress (address: string): boolean {
   return ip === '::' || ip === '::1' || /^f[cd]/.test(ip) || /^fe[89ab]/.test(ip)
 }
 
+// The server must only ever fetch what this endpoint claims to fetch: an image.
+function imageExtensionOf (imageUrl: unknown): string | undefined {
+  let url: URL
+  try {
+    url = new URL(imageUrl as string)
+  } catch {
+    return undefined
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') return undefined
+  const extension = url.pathname.split('.').slice(-1)[0].toLowerCase()
+  return ['jpg', 'jpeg', 'png', 'svg', 'gif'].includes(extension) ? extension : undefined
+}
+
 async function isPubliclyFetchable (imageUrl: unknown): Promise<boolean> {
   let url: URL
   try {
@@ -57,27 +70,29 @@ export function profileImageUrlUpload () {
   return async (req: Request, res: Response, next: NextFunction) => {
     if (req.body.imageUrl !== undefined) {
       const url = req.body.imageUrl
-      const fetchable = await isPubliclyFetchable(url)
+      const ext = imageExtensionOf(url)
+      const fetchable = ext !== undefined && await isPubliclyFetchable(url)
       if (fetchable && url.match(/(.)*solve\/challenges\/server-side(.)*/) !== null) req.app.locals.abused_ssrf_bug = true
       const loggedInUser = security.authenticatedUsers.get(req.cookies.token)
       if (loggedInUser) {
         try {
           if (!fetchable) {
-            throw new Error('imageUrl must be an http(s) URL resolving to a public address')
+            throw new Error('imageUrl must be an http(s) image URL resolving to a public address')
           }
           const response = await fetch(url, { redirect: 'manual' })
           if (!response.ok || !response.body) {
             throw new Error('url returned a non-OK status code or an empty body')
           }
-          const ext = ['jpg', 'jpeg', 'png', 'svg', 'gif'].includes(url.split('.').slice(-1)[0].toLowerCase()) ? url.split('.').slice(-1)[0].toLowerCase() : 'jpg'
           const fileStream = fs.createWriteStream(`frontend/dist/frontend/assets/public/images/uploads/${loggedInUser.data.id}.${ext}`, { flags: 'w' })
           await finished(Readable.fromWeb(response.body as any).pipe(fileStream))
           const user = await UserModel.findByPk(loggedInUser.data.id)
           await user?.update({ profileImage: `/assets/public/images/uploads/${loggedInUser.data.id}.${ext}` })
         } catch (error) {
           try {
-            const user = await UserModel.findByPk(loggedInUser.data.id)
-            await user?.update({ profileImage: url })
+            if (ext !== undefined) {
+              const user = await UserModel.findByPk(loggedInUser.data.id)
+              await user?.update({ profileImage: url })
+            }
             logger.warn(`Error retrieving user profile image: ${utils.getErrorMessage(error)}; using image link directly`)
           } catch (error) {
             next(error)
