@@ -685,7 +685,7 @@ function configureApp (app: ReturnType<typeof express>, seq: typeof sequelize) {
 
   /* Routes for profile page */
   app.get('/profile', security.updateAuthenticatedUsers(), utils.asyncHandler(getUserProfile()))
-  app.post('/profile', utils.asyncHandler(updateUserProfile()))
+  app.post('/profile', security.sameOriginOnly(), utils.asyncHandler(updateUserProfile()))
 
   /* Route for vulnerable code snippets */
   app.get('/snippets/:challenge', utils.asyncHandler(serveCodeSnippet()))
