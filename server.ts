@@ -401,8 +401,7 @@ function configureApp (app: ReturnType<typeof express>, seq: typeof sequelize) {
   app.use('/rest/user/authentication-details', security.isAuthorized())
   app.use('/rest/basket/:id', security.isAuthorized())
   app.use('/rest/basket/:id/order', security.isAuthorized())
-  /* Feedbacks: Anti-automation, server-side user association and rating validation */
-  app.post('/api/Feedbacks', rateLimit({ windowMs: 60 * 1000, max: 3, validate: false }))
+  /* Feedbacks: Server-side user association and rating validation */
   app.post('/api/Feedbacks', (req: Request, res: Response, next: NextFunction) => {
     if (req.body === Object(req.body)) { // a non-JSON body never gets past the CAPTCHA check below
       const user = security.authenticatedUsers.from(req)
