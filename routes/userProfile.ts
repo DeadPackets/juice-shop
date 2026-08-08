@@ -49,13 +49,14 @@ export function getUserProfile () {
       return
     }
 
-    // Leading backslash keeps Pug from interpolating a #{...} payload in the username.
-    const username = '\\' + user.username
+    let username = user.username
 
     const themeKey = config.get<string>('application.theme') as keyof typeof themes
     const theme = themes[themeKey] || themes['bluegrey-lightgreen']
 
     if (username) {
+      // Spliced into the Pug source, so escape HTML and neutralize Pug's #{...} interpolation.
+      username = entities.encode(username).replace(/#/g, '&num;')
       template = template.replace(/_username_/g, username)
     }
     template = template.replace(/_emailHash_/g, security.hash(user?.email))
@@ -71,7 +72,9 @@ export function getUserProfile () {
     try {
       const pug = (await import('pug')).default
       const fn = pug.compile(template)
-      const CSP = `img-src 'self' ${user?.profileImage}; script-src 'self' 'unsafe-eval'`
+      // Strip everything a CSP source expression cannot contain, or the image URL injects directives.
+      const profileImageSrc = (user?.profileImage ?? '').replace(/[^\w.:/-]/g, '')
+      const CSP = `img-src 'self' ${profileImageSrc}; script-src 'self'`
 
       challengeUtils.solveIf(challenges.usernameXssChallenge, () => {
         return username && user?.profileImage.match(/;[ ]*script-src(.)*'unsafe-inline'/g) !== null && utils.contains(username, '<script>alert(`xss`)</script>')

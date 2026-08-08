@@ -80,7 +80,8 @@ export const promotionVideo = () => {
 function getSubsFromFile () {
   const subtitles = config.get<string>('application.promotion.subtitles') ?? 'owasp_promo.vtt'
   const data = fs.readFileSync('frontend/dist/frontend/assets/public/videos/' + subtitles, 'utf8')
-  return data.toString()
+  // Subtitles are spliced into a <script> block, so any "</" would let them break out of it.
+  return data.toString().replace(/<\//g, '<\\/')
 }
 
 function videoPath () {
