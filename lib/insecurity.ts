@@ -73,7 +73,10 @@ export const isAuthorized = () => {
     requireValidToken(req, res, next)
   }
 }
-export const denyAll = () => expressJwt({ secret: '' + Math.random() } as any)
+// Not a JWT check: these routes have no authorized caller at all, so no token can ever pass.
+export const denyAll = () => (req: Request, res: Response) => {
+  res.status(401).json({ error: 'Unauthorized' })
+}
 export const authorize = (user = {}) => jwt.sign(user, privateKey, { expiresIn: '6h', algorithm: tokenAlgorithm })
 export const verify = (token: string) => {
   if (!token) {
@@ -181,9 +184,12 @@ export const deluxeToken = (email: string) => {
   return hmac.update(email + roles.deluxe).digest('hex')
 }
 
+// Browser-driven pages (e.g. /support/logs) send the session as a cookie, not an Authorization header.
+const tokenFrom = (req: Request) => req.cookies?.token || utils.jwtFrom(req)
+
 export const isAccounting = () => {
   return (req: Request, res: Response, next: NextFunction) => {
-    const decodedToken = verify(utils.jwtFrom(req)) && decode(utils.jwtFrom(req))
+    const decodedToken = verify(tokenFrom(req)) && decode(tokenFrom(req))
     if (decodedToken?.data?.role === roles.accounting) {
       next()
     } else {
@@ -194,7 +200,7 @@ export const isAccounting = () => {
 
 export const isAdmin = () => {
   return (req: Request, res: Response, next: NextFunction) => {
-    const decodedToken = verify(utils.jwtFrom(req)) && decode(utils.jwtFrom(req))
+    const decodedToken = verify(tokenFrom(req)) && decode(tokenFrom(req))
     if (decodedToken?.data?.role === roles.admin) {
       next()
     } else {
@@ -225,7 +231,7 @@ export const appendUserId = () => {
 }
 
 export const updateAuthenticatedUsers = () => (req: Request, res: Response, next: NextFunction) => {
-  const token = req.cookies.token || utils.jwtFrom(req)
+  const token = tokenFrom(req)
   if (token) {
     jwt.verify(token, publicKey, { algorithms: [tokenAlgorithm] }, (err: Error | null, decoded: any) => {
       if (err === null) {

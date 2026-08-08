@@ -15,6 +15,7 @@ import { type NextFunction, type Request, type Response } from 'express'
 import * as challengeUtils from '../lib/challengeUtils'
 import { challenges } from '../data/datacache'
 import * as utils from '../lib/utils'
+import logger from '../lib/logger'
 
 function ensureFileIsPassed ({ file }: Request, res: Response, next: NextFunction) {
   if (file != null) {
@@ -44,7 +45,19 @@ function handleZipFileUpload ({ file }: Request, res: Response, next: NextFuncti
                 const absolutePath = path.resolve(destinationDir, fileName)
                 challengeUtils.solveIf(challenges.fileWriteChallenge, () => { return absolutePath === path.resolve('ftp/legal.md') })
                 if (absolutePath.startsWith(destinationDir + path.sep)) {
-                  entry.pipe(fs.createWriteStream(absolutePath).on('error', function (err) { next(err) }))
+                  try {
+                    /* Entries below a subdirectory need it created before their write stream opens */
+                    const isDirectory = entry.type === 'Directory'
+                    fs.mkdirSync(isDirectory ? absolutePath : path.dirname(absolutePath), { recursive: true })
+                    if (isDirectory) {
+                      entry.autodrain()
+                    } else {
+                      entry.pipe(fs.createWriteStream(absolutePath).on('error', function (err) { next(err) }))
+                    }
+                  } catch (err) {
+                    logger.warn(`Skipping archive entry ${entry.path}: ${utils.getErrorMessage(err)}`)
+                    entry.autodrain()
+                  }
                 } else {
                   entry.autodrain()
                 }

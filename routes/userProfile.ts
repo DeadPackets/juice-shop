@@ -72,12 +72,12 @@ export function getUserProfile () {
     try {
       const pug = (await import('pug')).default
       const fn = pug.compile(template)
-      // Strip everything a CSP source expression cannot contain, or the image URL injects directives.
-      const profileImageSrc = (user?.profileImage ?? '').replace(/[^\w.:/-]/g, '')
+      // A CSP source expression ends at whitespace or ';', so only those can inject a second directive.
+      const profileImageSrc = (user?.profileImage ?? '').replace(/[;\s]+/g, '')
       const CSP = `img-src 'self' ${profileImageSrc}; script-src 'self'`
 
       challengeUtils.solveIf(challenges.usernameXssChallenge, () => {
-        return username && user?.profileImage.match(/;[ ]*script-src(.)*'unsafe-inline'/g) !== null && utils.contains(username, '<script>alert(`xss`)</script>')
+        return username && Boolean(user?.profileImage?.match(/;[ ]*script-src(.)*'unsafe-inline'/g)) && utils.contains(username, '<script>alert(`xss`)</script>')
       })
 
       res.set({

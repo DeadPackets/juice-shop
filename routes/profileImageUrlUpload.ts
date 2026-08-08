@@ -25,7 +25,8 @@ function isInternalAddress (address: string): boolean {
       (a === 100 && b >= 64 && b <= 127) ||
       (a === 198 && (b === 18 || b === 19))
   }
-  const ip = address.toLowerCase().split('%')[0]
+  const ip = canonicalIPv6(address)
+  if (ip === undefined) return true
   if (ip.startsWith('::ffff:')) {
     const mapped = ip.substring(7)
     if (net.isIPv4(mapped)) return isInternalAddress(mapped)
@@ -33,6 +34,29 @@ function isInternalAddress (address: string): boolean {
     return isInternalAddress([high >> 8, high & 255, low >> 8, low & 255].join('.'))
   }
   return ip === '::' || ip === '::1' || /^f[cd]/.test(ip) || /^fe[89ab]/.test(ip)
+}
+
+// '0:0:0:0:0:0:0:1' and '::1' are the same address, so they have to be compared in one canonical form.
+function canonicalIPv6 (address: string): string | undefined {
+  const withoutZone = address.toLowerCase().split('%')[0]
+  if (!net.isIPv6(withoutZone)) return undefined
+  try {
+    return new URL(`http://[${withoutZone}]`).hostname.slice(1, -1)
+  } catch {
+    return undefined
+  }
+}
+
+const extensionByContentType: Record<string, string> = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/gif': 'gif',
+  'image/svg+xml': 'svg'
+}
+
+function extensionForContentType (contentType: string | null): string | undefined {
+  if (contentType === null) return undefined
+  return extensionByContentType[contentType.split(';')[0].trim().toLowerCase()]
 }
 
 // The server must only ever fetch what this endpoint claims to fetch: an image.
@@ -70,38 +94,44 @@ export function profileImageUrlUpload () {
   return async (req: Request, res: Response, next: NextFunction) => {
     if (req.body.imageUrl !== undefined) {
       const url = req.body.imageUrl
-      const ext = imageExtensionOf(url)
-      const fetchable = ext !== undefined && await isPubliclyFetchable(url)
-      if (fetchable && url.match(/(.)*solve\/challenges\/server-side(.)*/) !== null) req.app.locals.abused_ssrf_bug = true
       const loggedInUser = security.authenticatedUsers.get(req.cookies.token)
-      if (loggedInUser) {
-        try {
-          if (!fetchable) {
-            throw new Error('imageUrl must be an http(s) image URL resolving to a public address')
-          }
-          const response = await fetch(url, { redirect: 'manual' })
-          if (!response.ok || !response.body) {
-            throw new Error('url returned a non-OK status code or an empty body')
-          }
-          const fileStream = fs.createWriteStream(`frontend/dist/frontend/assets/public/images/uploads/${loggedInUser.data.id}.${ext}`, { flags: 'w' })
-          await finished(Readable.fromWeb(response.body as any).pipe(fileStream))
-          const user = await UserModel.findByPk(loggedInUser.data.id)
-          await user?.update({ profileImage: `/assets/public/images/uploads/${loggedInUser.data.id}.${ext}` })
-        } catch (error) {
-          try {
-            if (ext !== undefined) {
-              const user = await UserModel.findByPk(loggedInUser.data.id)
-              await user?.update({ profileImage: url })
-            }
-            logger.warn(`Error retrieving user profile image: ${utils.getErrorMessage(error)}; using image link directly`)
-          } catch (error) {
-            next(error)
-            return
-          }
-        }
-      } else {
+      if (!loggedInUser) {
         next(new Error('Blocked illegal activity by ' + req.socket.remoteAddress))
         return
+      }
+      if (!await isPubliclyFetchable(url)) {
+        res.status(400).send('imageUrl must be an http(s) URL resolving to a public address')
+        return
+      }
+      let ext = imageExtensionOf(url)
+      try {
+        const response = await fetch(url, { redirect: 'manual' })
+        // Only a request that actually left the server can have abused anything.
+        if (url.match(/(.)*solve\/challenges\/server-side(.)*/) !== null) req.app.locals.abused_ssrf_bug = true
+        if (!response.ok || !response.body) {
+          throw new Error('url returned a non-OK status code or an empty body')
+        }
+        ext = ext ?? extensionForContentType(response.headers.get('content-type'))
+        if (ext === undefined) {
+          throw new Error('url did not serve a JPG, PNG, GIF or SVG image')
+        }
+        const fileStream = fs.createWriteStream(`frontend/dist/frontend/assets/public/images/uploads/${loggedInUser.data.id}.${ext}`, { flags: 'w' })
+        await finished(Readable.fromWeb(response.body as any).pipe(fileStream))
+        const user = await UserModel.findByPk(loggedInUser.data.id)
+        await user?.update({ profileImage: `/assets/public/images/uploads/${loggedInUser.data.id}.${ext}` })
+      } catch (error) {
+        logger.warn(`Error retrieving user profile image: ${utils.getErrorMessage(error)}`)
+        if (ext === undefined) {
+          res.status(400).send('imageUrl must point at a JPG, PNG, GIF or SVG image')
+          return
+        }
+        try {
+          const user = await UserModel.findByPk(loggedInUser.data.id)
+          await user?.update({ profileImage: url })
+        } catch (error) {
+          next(error)
+          return
+        }
       }
     }
     res.location(process.env.BASE_PATH + '/profile')
