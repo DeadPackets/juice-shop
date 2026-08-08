@@ -51,10 +51,41 @@ export const cutOffPoisonNullByte = (str: string) => {
   return str
 }
 
-export const isAuthorized = () => expressJwt(({ secret: publicKey }) as any)
+const tokenAlgorithm = 'RS256'
+
+// express-jwt@0.1.3 forwards no algorithm restriction, so the header has to be pinned here.
+const isSignedWithTokenAlgorithm = (token: string) => {
+  try {
+    return jws.decode(token)?.header.alg === tokenAlgorithm
+  } catch {
+    return false
+  }
+}
+
+export const isAuthorized = () => {
+  const requireValidToken = expressJwt(({ secret: publicKey }) as any)
+  return (req: Request, res: Response, next: NextFunction) => {
+    const token = utils.jwtFrom(req)
+    if (token && !isSignedWithTokenAlgorithm(token)) {
+      res.status(401).json({ error: 'Unauthorized' })
+      return
+    }
+    requireValidToken(req, res, next)
+  }
+}
 export const denyAll = () => expressJwt({ secret: '' + Math.random() } as any)
-export const authorize = (user = {}) => jwt.sign(user, privateKey, { expiresIn: '6h', algorithm: 'RS256' })
-export const verify = (token: string) => token ? (jws.verify as ((token: string, secret: string) => boolean))(token, publicKey) : false
+export const authorize = (user = {}) => jwt.sign(user, privateKey, { expiresIn: '6h', algorithm: tokenAlgorithm })
+export const verify = (token: string) => {
+  if (!token) {
+    return false
+  }
+  try {
+    jwt.verify(token, publicKey, { algorithms: [tokenAlgorithm] })
+    return true
+  } catch {
+    return false
+  }
+}
 export const decode = (token: string) => { return jws.decode(token)?.payload }
 
 export const sanitizeHtml = (html: string) => sanitizeHtmlLib(html)
@@ -196,7 +227,7 @@ export const appendUserId = () => {
 export const updateAuthenticatedUsers = () => (req: Request, res: Response, next: NextFunction) => {
   const token = req.cookies.token || utils.jwtFrom(req)
   if (token) {
-    jwt.verify(token, publicKey, (err: Error | null, decoded: any) => {
+    jwt.verify(token, publicKey, { algorithms: [tokenAlgorithm] }, (err: Error | null, decoded: any) => {
       if (err === null) {
         if (authenticatedUsers.get(token) === undefined) {
           authenticatedUsers.put(token, decoded)
