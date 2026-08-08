@@ -397,6 +397,20 @@ function configureApp (app: ReturnType<typeof express>, seq: typeof sequelize) {
   app.use('/rest/user/authentication-details', security.isAuthorized())
   app.use('/rest/basket/:id', security.isAuthorized())
   app.use('/rest/basket/:id/order', security.isAuthorized())
+  /* Feedbacks: Anti-automation, server-side user association and rating validation */
+  app.post('/api/Feedbacks', rateLimit({ windowMs: 60 * 1000, max: 3, validate: false }))
+  app.post('/api/Feedbacks', (req: Request, res: Response, next: NextFunction) => {
+    if (req.body === Object(req.body)) { // a non-JSON body never gets past the CAPTCHA check below
+      const user = security.authenticatedUsers.from(req)
+      req.body.UserId = user?.data ? user.data.id : null
+      const rating = Number(req.body.rating)
+      if (req.body.rating !== undefined && (!Number.isInteger(rating) || rating < 1 || rating > 5)) {
+        res.status(400).json({ error: 'Rating must be a whole number between 1 and 5' })
+        return
+      }
+    }
+    next()
+  })
   /* Challenge evaluation before finale takes over */ // vuln-code-snippet hide-start
   app.post('/api/Feedbacks', verify.forgedFeedbackChallenge())
   /* Captcha verification before finale takes over */
