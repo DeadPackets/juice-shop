@@ -44,7 +44,7 @@ export function resetPassword () {
           const updatedUser = await user.update({ password: newPassword })
           security.authenticatedUsers.invalidateAllFor(updatedUser.id)
           verifySecurityAnswerChallenges(updatedUser, answer)
-          res.json({ user: updatedUser })
+          res.json({ user: { id: updatedUser.id, email: updatedUser.email } })
         }
       } else {
         res.status(401).send(res.__('Wrong answer to security question.'))

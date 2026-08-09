@@ -57,7 +57,9 @@ export function changePassword () {
         challenges.changePasswordBenderChallenge,
         () => user.id === 3 && !currentPassword && user.password === security.hash('slurmCl4ssic')
       )
-      res.json({ user })
+      // The whole model carries the password hash and the TOTP secret, and the caller only
+      // needs to know which account was changed.
+      res.json({ user: { id: user.id, email: user.email } })
     } catch (error) {
       next(error)
     }
