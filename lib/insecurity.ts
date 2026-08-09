@@ -263,10 +263,14 @@ export const isAccounting = () => {
   }
 }
 
+export const isAdminRequest = (req: Request) => {
+  const decodedToken = verify(tokenFrom(req)) && decode(tokenFrom(req))
+  return decodedToken?.data?.role === roles.admin
+}
+
 export const isAdmin = () => {
   return (req: Request, res: Response, next: NextFunction) => {
-    const decodedToken = verify(tokenFrom(req)) && decode(tokenFrom(req))
-    if (decodedToken?.data?.role === roles.admin) {
+    if (isAdminRequest(req)) {
       next()
     } else {
       res.status(403).json({ error: 'Malicious activity detected' })
