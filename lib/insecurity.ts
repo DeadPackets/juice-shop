@@ -182,18 +182,28 @@ export const userEmailFrom = ({ headers }: any) => {
   return headers ? headers['x-user-email'] : undefined
 }
 
+// z85 is an encoding, not a signature, so a bare encoded coupon lets anyone mint whatever
+// discount they please. The key lives only in memory: coupons are valid for the current
+// month and never have to survive a restart.
+const couponKey = crypto.randomBytes(32)
+const COUPON_SIGNATURE_LENGTH = 16
+
+const couponSignature = (coupon: string) => {
+  return crypto.createHmac('sha256', couponKey).update(coupon).digest('hex').substring(0, COUPON_SIGNATURE_LENGTH)
+}
+
 export const generateCoupon = (discount: number, date = new Date()) => {
   const coupon = utils.toMMMYY(date) + '-' + discount
-  return z85.encode(coupon)
+  return z85.encode(coupon) + couponSignature(coupon)
 }
 
 export const discountFromCoupon = (coupon?: string) => {
-  if (!coupon) {
+  if (!coupon || coupon.length <= COUPON_SIGNATURE_LENGTH) {
     return undefined
   }
-  const decoded = z85.decode(coupon)
-  if (decoded && (hasValidFormat(decoded.toString()) != null)) {
-    const parts = decoded.toString().split('-')
+  const decoded = z85.decode(coupon.slice(0, -COUPON_SIGNATURE_LENGTH))?.toString()
+  if (decoded && (hasValidFormat(decoded) != null) && coupon.slice(-COUPON_SIGNATURE_LENGTH) === couponSignature(decoded)) {
+    const parts = decoded.split('-')
     const validity = parts[0]
     if (utils.toMMMYY(new Date()) === validity) {
       const discount = parts[1]
