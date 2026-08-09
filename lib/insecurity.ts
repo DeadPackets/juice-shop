@@ -45,6 +45,7 @@ interface IAuthenticatedUsers {
   from: (req: Request) => ResponseWithUser | undefined
   updateFrom: (req: Request, user: ResponseWithUser) => any
   invalidate: (token: string) => void
+  invalidateAllFor: (userId: number, exceptToken?: string) => void
 }
 
 export const hash = (data: string) => crypto.createHash('md5').update(data).digest('hex')
@@ -87,17 +88,18 @@ export const isAuthorized = () => {
 // A state change authorised by the ambient token cookie must not be triggerable from another site.
 export const sameOriginOnly = () => (req: Request, res: Response, next: NextFunction) => {
   const source = req.headers.origin ?? req.headers.referer
+  let sourceHost
   if (source !== undefined) {
-    let sourceHost
     try {
       sourceHost = new URL(source).host
     } catch {
       sourceHost = undefined
     }
-    if (sourceHost !== req.headers.host) {
-      res.status(403).json({ error: 'Cross-origin request blocked' })
-      return
-    }
+  }
+  // An absent or unparsable Origin/Referer proves nothing about the caller, so it cannot pass either.
+  if (sourceHost === undefined || sourceHost !== req.headers.host) {
+    res.status(403).json({ error: 'Cross-origin request blocked' })
+    return
   }
   next()
 }
@@ -164,6 +166,14 @@ export const authenticatedUsers: IAuthenticatedUsers = {
     }
     delete this.tokenMap[key]
     invalidatedTokens.add(key)
+  },
+  invalidateAllFor: function (userId: number, exceptToken?: string) {
+    const kept = exceptToken ? utils.unquote(exceptToken) : undefined
+    for (const [token, session] of Object.entries(this.tokenMap)) {
+      if (session.data.id === userId && token !== kept) {
+        this.invalidate(token)
+      }
+    }
   }
 }
 
