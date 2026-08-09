@@ -7,7 +7,7 @@ import crypto from 'node:crypto'
 import { type Request, type Response, type NextFunction } from 'express'
 import { type UserModel } from 'models/user'
 import { BasketModel } from '../models/basket'
-import expressJwt from 'express-jwt'
+import { expressjwt } from 'express-jwt'
 import jwt from 'jsonwebtoken'
 import jws from 'jws'
 import sanitizeHtmlLib from 'sanitize-html'
@@ -76,7 +76,7 @@ const isSignedWithTokenAlgorithm = (token: string) => {
 }
 
 export const isAuthorized = () => {
-  const requireValidToken = expressJwt(({ secret: publicKey }) as any)
+  const requireValidToken = expressjwt({ secret: publicKey, algorithms: [tokenAlgorithm] })
   return (req: Request, res: Response, next: NextFunction) => {
     const token = utils.jwtFrom(req)
     if (token && (!isSignedWithTokenAlgorithm(token) || isInvalidated(token))) {
