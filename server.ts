@@ -401,7 +401,7 @@ function configureApp (app: ReturnType<typeof express>, seq: typeof sequelize) {
   app.use('/api/SecurityAnswers/:id', security.denyAll())
   /* REST API */
   app.use('/rest/user/authentication-details', security.isAuthorized())
-  app.use('/rest/basket/:id', security.isAuthorized())
+  app.use('/rest/basket/:id', security.isAuthorized(), security.isBasketOwner())
   app.use('/rest/basket/:id/order', security.isAuthorized())
   /* Feedbacks: Server-side user association and rating validation */
   app.post('/api/Feedbacks', (req: Request, res: Response, next: NextFunction) => {

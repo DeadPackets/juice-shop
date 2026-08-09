@@ -6,6 +6,7 @@
 import crypto from 'node:crypto'
 import { type Request, type Response, type NextFunction } from 'express'
 import { type UserModel } from 'models/user'
+import { BasketModel } from '../models/basket'
 import expressJwt from 'express-jwt'
 import jwt from 'jsonwebtoken'
 import jws from 'jws'
@@ -280,6 +281,23 @@ export const appendUserId = () => {
       next()
     } catch (error: unknown) {
       res.status(401).json({ status: 'error', message: utils.getErrorMessage(error) })
+    }
+  }
+}
+
+// The basket id is taken from the path, so a valid token alone says nothing about who owns that row.
+export const isBasketOwner = () => {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const user = authenticatedUsers.from(req)
+      const basket = await BasketModel.findByPk(req.params.id)
+      if (!user || (basket != null && basket.UserId !== user.data.id)) {
+        res.status(401).json({ error: 'Unauthorized' })
+        return
+      }
+      next()
+    } catch (error: unknown) {
+      next(error)
     }
   }
 }
