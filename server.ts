@@ -407,7 +407,8 @@ function configureApp (app: ReturnType<typeof express>, seq: typeof sequelize) {
   app.get('/api/SecurityAnswers', security.denyAll())
   app.use('/api/SecurityAnswers/:id', security.denyAll())
   /* REST API */
-  app.use('/rest/user/authentication-details', security.isAuthorized())
+  /* The full account list with every user's login state is administration data */
+  app.use('/rest/user/authentication-details', security.isAdmin())
   app.use('/rest/basket/:id', security.isAuthorized(), security.isBasketOwner())
   app.use('/rest/basket/:id/order', security.isAuthorized())
   /* Feedbacks: Server-side user association and rating validation */
