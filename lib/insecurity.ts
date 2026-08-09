@@ -50,6 +50,24 @@ interface IAuthenticatedUsers {
 }
 
 export const hash = (data: string) => crypto.createHash('md5').update(data).digest('hex')
+
+// The digest above is fine for deriving an order reference, but a password needs work factor and
+// a per-password salt or the whole table falls to one rainbow table.
+const PASSWORD_KEY_LENGTH = 64
+
+export const hashPassword = (clearTextPassword: string) => {
+  const salt = crypto.randomBytes(16)
+  const derived = crypto.scryptSync(clearTextPassword ?? '', salt, PASSWORD_KEY_LENGTH)
+  return `scrypt$${salt.toString('hex')}$${derived.toString('hex')}`
+}
+
+export const verifyPassword = (clearTextPassword: string, stored: string) => {
+  const [scheme, salt, expected] = (stored ?? '').split('$')
+  if (scheme !== 'scrypt' || !salt || !expected) return false
+  const derived = crypto.scryptSync(clearTextPassword ?? '', Buffer.from(salt, 'hex'), PASSWORD_KEY_LENGTH)
+  const expectedBytes = Buffer.from(expected, 'hex')
+  return derived.length === expectedBytes.length && crypto.timingSafeEqual(derived, expectedBytes)
+}
 export const hmac = (data: string) => crypto.createHmac('sha256', 'pa4qacea4VK9t9nGv7yZtwmj').update(data).digest('hex')
 
 export const cutOffPoisonNullByte = (str: string) => {
