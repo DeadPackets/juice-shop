@@ -28,7 +28,7 @@ export function imageCaptchas () {
       }
       const imageCaptchaInstance = ImageCaptchaModel.build(imageCaptcha)
       await imageCaptchaInstance.save()
-      res.json(imageCaptcha)
+      res.json({ image: imageCaptcha.image, UserId: imageCaptcha.UserId })
     } catch (error) {
       res.status(400).send(res.__('Unable to create CAPTCHA. Please try again.'))
     }
@@ -49,7 +49,7 @@ export const verifyImageCaptcha = () => async (req: Request, res: Response, next
       },
       order: [['createdAt', 'DESC']]
     })
-    if (!captchas[0] || req.body.answer === captchas[0].answer) {
+    if (captchas[0] && req.body.answer === captchas[0].answer) {
       next()
     } else {
       res.status(401).send(res.__('Wrong answer to CAPTCHA. Please try again.'))
