@@ -10,7 +10,7 @@ import { type AfterViewInit, Component, NgZone, type OnDestroy, ViewChild, Chang
 import { MatPaginator } from '@angular/material/paginator'
 import { BehaviorSubject, forkJoin, type Subscription } from 'rxjs'
 import { MatTableDataSource } from '@angular/material/table'
-import { DomSanitizer, type SafeHtml } from '@angular/platform-browser'
+import { type SafeHtml } from '@angular/platform-browser'
 import { TranslateModule } from '@ngx-translate/core'
 import { SocketIoService } from '../Services/socket-io.service'
 
@@ -38,7 +38,6 @@ export class SearchResultComponent implements OnDestroy, AfterViewInit {
   private readonly quantityService = inject(QuantityService)
   private readonly router = inject(Router)
   private readonly route = inject(ActivatedRoute)
-  private readonly sanitizer = inject(DomSanitizer)
   private readonly ngZone = inject(NgZone)
   private readonly io = inject(SocketIoService)
   private readonly cdRef = inject(ChangeDetectorRef)
