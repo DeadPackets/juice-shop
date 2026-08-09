@@ -32,7 +32,9 @@ interface Product {
 export function placeOrder () {
   return (req: Request, res: Response, next: NextFunction) => {
     const id = req.params.id
-    BasketModel.findOne({ where: { id }, include: [{ model: ProductModel, paranoid: false, as: 'Products' }] })
+    // Withdrawn products are only soft deleted; including them anyway is what keeps a
+    // discontinued item orderable.
+    BasketModel.findOne({ where: { id }, include: [{ model: ProductModel, paranoid: true, as: 'Products' }] })
       .then(async (basket: BasketModel | null) => {
         if (basket != null) {
           const customer = security.authenticatedUsers.from(req)
